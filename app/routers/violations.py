@@ -16,6 +16,7 @@ from app.schemas.violation import (
     ViolationCreate, ViolationStatusUpdate,
     ViolationResponse, ViolationSummary
 )
+from app.utils.notification import send_telegram
 
 router = APIRouter(prefix="/api/violations", tags=["Violations"])
 
@@ -69,6 +70,27 @@ def create_violation(violation_data: ViolationCreate, db: Session = Depends(get_
     db.add(violation)
     db.commit()
     db.refresh(violation)
+
+        # Kirim notifikasi Telegram
+    apd_list = []
+    if violation_data.missing_helmet:
+        apd_list.append("Helm")
+    if violation_data.missing_vest:
+        apd_list.append("Rompi")
+    if violation_data.missing_mask:
+        apd_list.append("Masker")
+
+    nama = violation_data.worker_name_manual or f"Worker ID {violation_data.worker_id}"
+    apd_str = ", ".join(apd_list)
+
+    send_telegram(
+        f"<b>Pelanggaran APD Terdeteksi</b>\n\n"
+        f"Pelanggar: {nama}\n"
+        f"APD tidak dipakai: {apd_str}\n"
+        f"Lokasi: {violation_data.notes or '-'}\n"
+        f"Dicatat oleh: {violation_data.verified_by or '-'}"
+    )
+
     return violation
 
 
