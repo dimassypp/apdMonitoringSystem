@@ -5,27 +5,13 @@ from app.models.violation import ViolationStatus
 
 
 class ViolationCreate(BaseModel):
-    """
-    Schema untuk mencatat pelanggaran — diisi pengawas K3 setelah lihat hasil deteksi AI.
-    
-    Pengawas harus isi:
-    - capture_id: foto mana yang dilanggar
-    - worker_id ATAU worker_name_manual: siapa pelanggarnya
-    - missing_helmet/vest/mask: APD apa yang tidak dipakai
-    - verified_by: nama pengawas yang mencatat
-    """
     capture_id: int
     detection_id: Optional[int] = None
-
-    # Identitas pelanggar — pilih salah satu atau keduanya
     worker_id: Optional[int] = None
-    worker_name_manual: Optional[str] = None
-
-    # Konfirmasi APD yang tidak dipakai
+    worker_name_manual: Optional[str] = None   # opsional, diisi nanti saat verifikasi
     missing_helmet: bool = False
     missing_vest: bool = False
     missing_mask: bool = False
-
     notes: Optional[str] = None
     verified_by: Optional[str] = None
 
@@ -65,3 +51,11 @@ class ViolationSummary(BaseModel):
     missing_helmet_count: int
     missing_vest_count: int
     missing_mask_count: int
+
+class ViolationVerify(BaseModel):
+    """Schema untuk verifikasi oleh pengawas — diisi setelah AI buat violation"""
+    worker_id: Optional[int] = None
+    worker_name_manual: Optional[str] = None
+    notes: Optional[str] = None
+    verified_by: str
+    status: ViolationStatus                 # verified atau false_alarm

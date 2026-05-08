@@ -12,10 +12,7 @@ from datetime import datetime
 from app.database import get_db
 from app.models.violation import Violation, ViolationStatus
 from app.models.capture import Capture
-from app.schemas.violation import (
-    ViolationCreate, ViolationStatusUpdate,
-    ViolationResponse, ViolationSummary
-)
+from app.schemas.violation import ViolationCreate, ViolationStatusUpdate, ViolationResponse, ViolationSummary, ViolationVerify
 from app.utils.notification import send_telegram
 
 router = APIRouter(prefix="/api/violations", tags=["Violations"])
@@ -47,13 +44,6 @@ def create_violation(violation_data: ViolationCreate, db: Session = Depends(get_
     capture = db.query(Capture).filter(Capture.id == violation_data.capture_id).first()
     if not capture:
         raise HTTPException(status_code=404, detail="Capture tidak ditemukan")
-
-    # Minimal harus ada nama pekerja (dari database atau manual)
-    if not violation_data.worker_id and not violation_data.worker_name_manual:
-        raise HTTPException(
-            status_code=400,
-            detail="Harus isi worker_id atau worker_name_manual untuk identifikasi pelanggar"
-        )
 
     # Minimal harus ada satu APD yang dilanggar
     if not (violation_data.missing_helmet or violation_data.missing_vest or violation_data.missing_mask):
@@ -170,6 +160,40 @@ def update_violation_status(
     violation.status = update_data.status
     if update_data.verified_by:
         violation.verified_by = update_data.verified_by
+    violation.verified_at = datetime.now()
+
+    db.commit()
+    db.refresh(violation)
+    return violation
+
+@router.patch("/{violation_id}/verify", response_model=ViolationResponse, summary="Verifikasi pelanggaran oleh pengawas")
+def verify_violation(
+    violation_id: int,
+    update_data: ViolationVerify,
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint untuk pengawas K3 melakukan verifikasi setelah AI mendeteksi pelanggaran.
+    
+    Pengawas isi:
+    - worker_id atau worker_name_manual: siapa pelanggarnya
+    - status: verified atau false_alarm
+    - notes: catatan tambahan
+    - verified_by: nama pengawas
+    """
+    violation = db.query(Violation).filter(Violation.id == violation_id).first()
+    if not violation:
+        raise HTTPException(status_code=404, detail="Pelanggaran tidak ditemukan")
+
+    if update_data.worker_id:
+        violation.worker_id = update_data.worker_id
+    if update_data.worker_name_manual:
+        violation.worker_name_manual = update_data.worker_name_manual
+    if update_data.notes:
+        violation.notes = update_data.notes
+
+    violation.status = update_data.status
+    violation.verified_by = update_data.verified_by
     violation.verified_at = datetime.now()
 
     db.commit()
