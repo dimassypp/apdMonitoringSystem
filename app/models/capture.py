@@ -22,7 +22,6 @@ class Capture(Base):
     id = Column(Integer, primary_key=True, index=True)
     image_path = Column(String(500), nullable=False)           # Path foto asli
     image_enhanced_path = Column(String(500), nullable=True)   # Path foto setelah di-enhance
-    camera_location = Column(String(200), nullable=True)       # Lokasi kamera (contoh: "Area Receiving")
     captured_at = Column(DateTime(timezone=True), server_default=func.now())
     status = Column(Enum(CaptureStatus), default=CaptureStatus.PENDING)
 

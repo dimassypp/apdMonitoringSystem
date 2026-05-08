@@ -1,32 +1,28 @@
-from sqlalchemy import Column, Integer, Boolean, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, Boolean, Float, DateTime, ForeignKey, String, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+import enum
 from app.database import Base
 
 
+class DetectionStatus(str, enum.Enum):
+    UNVERIFIED = "unverified"    # Menunggu verifikasi pengawas
+    CONFIRMED  = "confirmed"     # Dikonfirmasi pelanggaran → pengawas buat violation
+    FALSE_ALARM = "false_alarm"  # Ternyata bukan pelanggaran
+
+
 class Detection(Base):
-    """
-    Tabel hasil analisis AI terhadap foto.
-    Data ini dikirim oleh modul AI (branch ai-model) ke endpoint backend.
-    
-    has_helmet, has_vest, has_mask = True jika APD terdeteksi dipakai,
-    False jika tidak terdeteksi / tidak dipakai.
-    """
     __tablename__ = "detections"
 
-    id = Column(Integer, primary_key=True, index=True)
-    capture_id = Column(Integer, ForeignKey("captures.id"), unique=True, nullable=False)
-
-    # Hasil deteksi APD dari model AI
-    has_helmet = Column(Boolean, nullable=True)   # True = pakai helm, False = tidak
-    has_vest = Column(Boolean, nullable=True)     # True = pakai rompi, False = tidak
-    has_mask = Column(Boolean, nullable=True)     # True = pakai masker, False = tidak
-
-    # Tingkat keyakinan model AI (0.0 - 1.0), opsional
+    id               = Column(Integer, primary_key=True, index=True)
+    capture_id       = Column(Integer, ForeignKey("captures.id"), unique=True, nullable=False)
+    has_helmet       = Column(Boolean, nullable=True)
+    has_vest         = Column(Boolean, nullable=True)
+    has_mask         = Column(Boolean, nullable=True)
     confidence_score = Column(Float, nullable=True)
+    camera_location  = Column(String(200), nullable=True)
+    status           = Column(Enum(DetectionStatus), default=DetectionStatus.UNVERIFIED)
+    detected_at      = Column(DateTime(timezone=True), server_default=func.now())
 
-    detected_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    # Relasi ke capture
-    capture = relationship("Capture", back_populates="detection")
+    capture    = relationship("Capture", back_populates="detection")
     violations = relationship("Violation", back_populates="detection")

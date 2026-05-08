@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from app.models.detection import DetectionStatus
 
 
 class DetectionCreate(BaseModel):
@@ -27,3 +28,11 @@ class DetectionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class DetectionVerify(BaseModel):
+    """Schema untuk verifikasi pengawas"""
+    status: DetectionStatus                     # confirmed atau false_alarm
+    worker_id: Optional[int] = None
+    worker_name_manual: Optional[str] = None    # nama pelanggar
+    notes: Optional[str] = None
+    verified_by: str                            # nama pengawas
