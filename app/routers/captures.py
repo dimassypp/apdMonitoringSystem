@@ -25,7 +25,6 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 @router.post("/upload", response_model=CaptureResponse, summary="Upload foto dari CCTV")
 async def upload_capture(
     file: UploadFile = File(..., description="File foto dari CCTV (jpg/png)"),
-    camera_location: Optional[str] = Form(None, description="Lokasi kamera, contoh: Area Receiving"),
     db: Session = Depends(get_db)
 ):
     """
@@ -61,7 +60,6 @@ async def upload_capture(
     capture = Capture(
         image_path=save_path,
         image_enhanced_path=enhanced_path,
-        camera_location=camera_location,
         status=status
     )
     db.add(capture)

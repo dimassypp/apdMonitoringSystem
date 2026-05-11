@@ -9,7 +9,6 @@ class CaptureResponse(BaseModel):
     id: int
     image_path: str
     image_enhanced_path: Optional[str]
-    camera_location: Optional[str]
     captured_at: datetime
     status: CaptureStatus
 
