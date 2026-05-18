@@ -148,7 +148,7 @@ while cap.isOpened():
     if is_violating:
         now = datetime.now()
 
-        if (now.timestamp() - last_send_time) > 10:
+        if (now.timestamp() - last_send_time) > 60:
             last_send_time = now.timestamp()
 
             # Hitung rata-rata confidence semua deteksi
