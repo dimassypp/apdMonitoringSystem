@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 import os
 
@@ -12,6 +12,39 @@ from app.schemas.detection import DetectionCreate, DetectionResponse, DetectionV
 router = APIRouter(prefix="/api/detections", tags=["Detections"])
 
 
+# ── GET /api/detections/ ── LIST (dibutuhkan dashboard verifikasi) ─────────────
+@router.get(
+    "/",
+    response_model=List[DetectionResponse],
+    summary="Ambil daftar deteksi, bisa filter by status"
+)
+def list_detections(
+    status: Optional[DetectionStatus] = Query(
+        None,
+        description="Filter status: unverified | confirmed | false_alarm"
+    ),
+    limit: int  = Query(50,  ge=1, le=200, description="Maks jumlah hasil"),
+    offset: int = Query(0,   ge=0,         description="Skip N baris pertama"),
+    db: Session = Depends(get_db),
+):
+    """
+    Dipakai dashboard untuk mengambil antrian verifikasi:
+      GET /api/detections/?status=unverified
+    Tanpa filter → kembalikan semua deteksi (maks limit).
+    """
+    query = db.query(Detection)
+    if status is not None:
+        query = query.filter(Detection.status == status)
+    return (
+        query
+        .order_by(Detection.detected_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+
+# ── POST /api/detections/report ── AI laporkan anomali ────────────────────────
 @router.post("/report", summary="AI laporkan anomali — foto + hasil deteksi sekaligus")
 async def report_anomaly(
     file: UploadFile = File(...),
@@ -30,7 +63,6 @@ async def report_anomaly(
     Pengawas yang kemudian verifikasi dan buat violation.
     """
     import uuid
-    from app.models.capture import Capture, CaptureStatus
     from app.utils.image_enhance import enhance_image
     from app.utils.notification import send_telegram
 
@@ -97,7 +129,12 @@ async def report_anomaly(
     }
 
 
-@router.get("/{capture_id}", response_model=DetectionResponse, summary="Ambil hasil deteksi by capture ID")
+# ── GET /api/detections/{capture_id} ── by capture ID ─────────────────────────
+@router.get(
+    "/{capture_id}",
+    response_model=DetectionResponse,
+    summary="Ambil hasil deteksi by capture ID"
+)
 def get_detection_by_capture(capture_id: int, db: Session = Depends(get_db)):
     """
     Ambil hasil deteksi AI berdasarkan capture_id.
@@ -108,6 +145,8 @@ def get_detection_by_capture(capture_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Hasil deteksi belum ada untuk capture ini")
     return detection
 
+
+# ── PATCH /api/detections/{detection_id}/verify ── verifikasi pengawas ─────────
 @router.patch("/{detection_id}/verify", summary="Pengawas verifikasi hasil deteksi AI")
 def verify_detection(
     detection_id: int,
@@ -116,8 +155,8 @@ def verify_detection(
 ):
     """
     Pengawas verifikasi setelah lihat foto dan hasil deteksi di dashboard.
-    
-    Kalau confirmed → otomatis buat violation baru dengan nama pelanggar
+
+    Kalau confirmed  → otomatis buat violation baru dengan nama pelanggar
     Kalau false_alarm → detection ditandai false alarm, selesai
     """
     from app.models.violation import Violation, ViolationStatus
@@ -136,7 +175,7 @@ def verify_detection(
     if verify_data.status == DetectionStatus.CONFIRMED:
         violation = Violation(
             capture_id=detection.capture_id,
-            detection_id=detection.id,          # ← tambah ini
+            detection_id=detection.id,
             worker_id=verify_data.worker_id,
             worker_name_manual=verify_data.worker_name_manual,
             missing_helmet=not detection.has_helmet,
