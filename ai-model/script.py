@@ -16,7 +16,7 @@ except Exception as e:
     exit(1)
 
 try:
-    model_ppe = YOLO("best2.pt")      # Model 2: vest, helm, person
+    model_ppe = YOLO("best2.pt")      # Model 2: vest, hardhat, person
     print("✅ Model 2 (best2.pt) berhasil dimuat!")
     print("   Label model_ppe:", model_ppe.names)
 except Exception as e:
@@ -28,18 +28,17 @@ CAMERA_LOCATION  = "Kamera Laptop - Area Produksi"
 
 # Warna per label (BGR)
 LABEL_COLORS = {
-    "mask":    (0,   200,   0),   # hijau
-    "no-mask": (0,     0, 255),   # merah
-    "helmet":  (255, 180,   0),   # biru-muda
-    "no-helmet":(0,   0, 255),
-    "vest":    (0,   255, 200),   # cyan
-    "no-vest": (0,     0, 255),
-    "person":  (200, 200, 200),   # abu-abu
+    "mask":       (0,   200,   0),   # hijau
+    "no-mask":    (0,     0, 255),   # merah
+    "hardhat":    (255, 180,   0),   # biru-muda
+    "no_hardhat": (0,     0, 255),   # merah
+    "vest":       (0,   255, 200),   # cyan
+    "no-vest":    (0,     0, 255),   # merah
+    "person":     (200, 200, 200),   # abu-abu
 }
 DEFAULT_COLOR = (0, 255, 0)
 
 
-# Kamera
 def find_camera_index(max_index=3):
     for i in range(max_index + 1):
         cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
@@ -60,7 +59,6 @@ def open_camera(preferred_index=None):
         return None
     return cv2.VideoCapture(idx, cv2.CAP_DSHOW)
 
-# Enhancement (opsional, bisa dipakai sebelum inference kalau perlu)
 def enhance_crop(img):
     lab  = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
@@ -72,7 +70,6 @@ def enhance_crop(img):
     return cv2.filter2D(enhanced, -1, kernel)
 
 
-# Kirim ke backend 
 def send_violation_to_api(full_frame, violations_found, avg_confidence=0.0):
     try:
         has_helmet = "no-helmet" not in violations_found
@@ -108,12 +105,7 @@ def send_violation_to_api(full_frame, violations_found, avg_confidence=0.0):
         print(f"❌ Error: {e}")
 
 
-# Helper: gambar bounding box + label
 def draw_boxes(display_frame, results, model, collected_labels, all_confs):
-    """
-    Menggambar semua bounding box dari satu hasil inferensi ke display_frame.
-    Mengisi collected_labels dan all_confs secara in-place.
-    """
     for result in results:
         for box in result.boxes:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -134,7 +126,6 @@ def draw_boxes(display_frame, results, model, collected_labels, all_confs):
             )
 
 
-# Main
 cap = open_camera()
 last_send_time = 0
 
@@ -154,12 +145,9 @@ while cap.isOpened():
 
     display_frame = frame.copy()
 
-    # nferensi dua model
-    # Model 1 — best.pt  : mask / no-mask
-    results_mask = model_mask(frame, conf=0.80, verbose=False)
-
-    # Model 2 — best2.pt : helmet / no-helmet, vest / no-vest, person
-    results_ppe  = model_ppe(frame,  conf=0.80, verbose=False)
+    # Inferensi dua model
+    results_mask = model_mask(frame, conf=0.80, verbose=False)  # mask
+    results_ppe  = model_ppe(frame,  conf=0.80, verbose=False)  # hardhat, vest, person
 
     detected_labels = []
     all_confs       = []
@@ -167,26 +155,21 @@ while cap.isOpened():
     draw_boxes(display_frame, results_mask, model_mask, detected_labels, all_confs)
     draw_boxes(display_frame, results_ppe,  model_ppe,  detected_labels, all_confs)
 
-    # Logika pelanggaran
-    # Hanya proses jika ada setidaknya satu label terdeteksi
-    # (abaikan label 'person' saat menentukan ada/tidaknya objek APD)
     non_person_labels = [l for l in detected_labels if l != "person"]
 
     if len(detected_labels) == 0:
         cv2.putText(display_frame, "Tidak ada objek terdeteksi", (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128, 128, 128), 2)
-
     else:
         person_detected = "person" in detected_labels
 
-        # Cek keberadaan APD dari label yang terdeteksi
-        has_helmet = "helmet"  in detected_labels
+        # Cek keberadaan APD — hardhat untuk helm
+        has_helmet = "hardhat" in detected_labels
         has_vest   = "vest"    in detected_labels
         has_mask   = "mask"    in detected_labels
 
         violations_found = []
 
-        # Hanya evaluasi pelanggaran jika ada orang / APD yang relevan terdeteksi
         if person_detected or len(non_person_labels) > 0:
             if not has_helmet: violations_found.append("no-helmet")
             if not has_vest:   violations_found.append("no-vest")
@@ -204,10 +187,9 @@ while cap.isOpened():
         cv2.putText(display_frame, status_text, (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
 
-        # Kirim ke backend
         if is_violating:
             now = datetime.now()
-            if (now.timestamp() - last_send_time) > 20:
+            if (now.timestamp() - last_send_time) > 60:
                 last_send_time = now.timestamp()
 
                 avg_conf   = sum(all_confs) / len(all_confs) if all_confs else 0.0
